@@ -1,2 +1,3 @@
 environment/.venv
 notebooks/.env
+src/.env
