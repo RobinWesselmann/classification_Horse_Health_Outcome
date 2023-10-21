@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/Robin Wesselmann/Desktop/Competition_Health Outcomes_of_Horses/tracking/mlruns/a27ae998eddf40608b1b94e5b22905d3/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '568680935888398054'
+lifecycle_stage: active
+run_id: a27ae998eddf40608b1b94e5b22905d3
+run_name: test_run
+run_uuid: a27ae998eddf40608b1b94e5b22905d3
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1697926229218
+status: 3
+tags: []
+user_id: unknown

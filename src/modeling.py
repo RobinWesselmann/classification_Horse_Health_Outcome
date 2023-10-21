@@ -13,8 +13,6 @@ from sklearn.model_selection import StratifiedKFold, cross_validate
 load_dotenv(dotenv_path="../.env")
 RAW_DATA_PATH = os.environ.get("RAW_DATA_PATH_py", "")
 TRACKING_PATH = os.environ.get("TRACKING_PATH", "")
-PULSE_ENCODING = {"yes": 1, "no": 0}
-OUTCOME_ENCODING = {"died": 0, "euthanized": 1, "lived": 2}
 
 
 def print_experiment_infos(experiment):
@@ -44,12 +42,17 @@ if __name__ == "__main__":
 
     except Exception as e:
         print(e)
-        experiment = mlflow_client.get_experiment("961575633781897667")
+        experiment = mlflow_client.get_experiment("568680935888398054")
         print_experiment_infos(experiment)
 
     # separate data
-    test_feat = ["pulse", "respiratory_rate",
-                 "packed_cell_volume", "surgery"]
+    numerical_columns = ["pulse", "respiratory_rate", "packed_cell_volume"]
+    categorical_columns = ['surgical_lesion', 'abdomo_appearance', 'cp_data',
+                           'temp_of_extremities', 'peristalsis', 'abdominal_distention',
+                           'age', 'abdomen', 'rectal_exam_feces', 'surgery',
+                           'nasogastric_tube']
+
+    test_feat = numerical_columns + categorical_columns
     train_feat = test_feat + ["outcome"]
 
     train, test = train_data[train_feat], test_data[test_feat]
@@ -61,8 +64,7 @@ if __name__ == "__main__":
 
     params = {
         "n_estimators": 500,
-        "criterion": "gini",
-        "max_depth": 8
+        "criterion": "gini"
     }
 
     kf = StratifiedKFold(n_splits=5, shuffle=False)
@@ -79,16 +81,20 @@ if __name__ == "__main__":
             "outcome", axis=1), valid_tmp["outcome"]
 
         # prepare train
-        X_train["surgery"] = X_train["surgery"].map(PULSE_ENCODING)
-        y_train = y_train.map(OUTCOME_ENCODING)
+        X_train[categorical_columns] = X_train[categorical_columns].astype(
+            "category").apply(lambda x: x.cat.codes)
+
+        y_train = y_train.astype("category").cat.codes
 
         # train
         rf = RandomForestClassifier(**params)
         rf.fit(X_train, y_train)
 
         # prepare valid
-        X_valid["surgery"] = X_valid["surgery"].map(PULSE_ENCODING)
-        y_valid = y_valid.map(OUTCOME_ENCODING)
+        X_valid[categorical_columns] = X_valid[categorical_columns].astype(
+            "category").apply(lambda x: x.cat.codes)
+        y_valid = y_valid.astype("category").cat.codes
+
         y_pred = rf.predict(X_valid)
 
         acc_score = accuracy_score(y_true=y_valid, y_pred=y_pred)
@@ -104,6 +110,11 @@ if __name__ == "__main__":
             else:
                 metrics[score_name].append(score)
 
+    print(f"{'#'*15}")
+    print(f"CV Accuracy: {np.mean(metrics['accuracy'])}")
+    print(f"CV Precision: {np.mean(metrics['precision'])}")
+    print(f"CV Recall: {np.mean(metrics['recall'])}")
+
     mlflow_client.log_metric(
         run_id=run.info.run_id, key="accuracy_cv", value=np.mean(metrics["accuracy"]))
     mlflow_client.log_metric(
@@ -114,12 +125,12 @@ if __name__ == "__main__":
     mlflow_client.log_param(run_id=run.info.run_id,
                             key="Feature Names", value=train_feat)
 
-    X_train.to_csv("X_train.csv")
-    mlflow_client.log_artifact(
-        run_id=run.info.run_id, local_path="X_train.csv")
+    # X_train.to_csv("X_train.csv")
+    # mlflow_client.log_artifact(
+    #    run_id=run.info.run_id, local_path="X_train.csv")
 
-    dataset = mlflow_client.data.from_pandas(train, source="train.csv")
-    mlflow_client.log_inputs(run.info.run_id, dataset)
+    # dataset = mlflow_client.data.from_pandas(train, source="train.csv")
+    # mlflow_client.log_inputs(run.info.run_id, dataset)
 
     model_params = rf.get_params()
 
