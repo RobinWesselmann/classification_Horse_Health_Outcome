@@ -3,6 +3,21 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
 
+[[source]]
+url = "https://download.pytorch.org/whl/"
+verify_ssl = true
+name = "downloadpytorch"
+
+[[source]]
+url = "https://download.pytorch.org/whl/"
+verify_ssl = true
+name = "downloadpytorch"
+
+[[source]]
+url = "https://download.pytorch.org/whl/"
+verify_ssl = true
+name = "downloadpytorch"
+
 [packages]
 pandas = "*"
 numpy = "*"
@@ -12,6 +27,10 @@ ipykernel = "*"
 python-dotenv = "*"
 kaggle = "*"
 mlflow = "*"
+torch = "*"
+torchvision = {version = "==0.15.2", index = "downloadpytorch"}
+torchaudio = {version = "==2.0.2", index = "downloadpytorch"}
+lightgbm = "*"
 
 [dev-packages]
 
