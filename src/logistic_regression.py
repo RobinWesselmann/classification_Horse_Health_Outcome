@@ -13,7 +13,7 @@ from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 
-import lightgbm as lgb
+from sklearn.linear_model import LogisticRegression
 from tqdm import tqdm
 
 import torch
@@ -135,42 +135,31 @@ def score_fn(y_pred, y_true):
     return f1_score(y_true, y_pred, average="micro")
 
 
-def lgb_eval_fn(pred, eval_data):
-    act = eval_data.get_label()
-    pred = pred.reshape(act.shape[0], -1)
-    return 'micro_f1_score', score_fn(pred.argmax(axis=1), act), True
-
-
-class LGBModel:
+class Logistic_Regression_Model:
     def __init__(self, cfg):
-        self.weight_map = cfg.weight_map
-        self.params = cfg.params_lgb
+        self.params = cfg.params_logistic_regression
         self.target = "outcome"
         self.cat_cols = [c for c in cfg.data["cat_cols"]
                          if c not in cfg.data["rem_cols"]]
+
         self.features = None
         self.model = None
 
     def fit(self, df_train, df_val=None):
+        df_train.columns = df_train.columns.astype(str)
         self.features = df_train.drop(self.target, axis=1).columns.tolist()
-        lgb_train = lgb.Dataset(
-            data=df_train[self.features], label=df_train[self.target], weight=df_train[self.target].map(self.weight_map))
 
-        if df_val is not None:
-            lgb_val = lgb.Dataset(
-                data=df_val[self.features], label=df_val[self.target], reference=lgb_train)
         params0 = {k: v for k, v in self.params.items()}
-        self.model = lgb.train(
-            params=params0, train_set=lgb_train,
-            valid_sets=[lgb_val] if df_val is not None else None,
-            # early_stopping_rounds=100 if df_val is not None else None,
-            feval=lgb_eval_fn if df_val is not None else None,
-            # verbose_eval=0 if df_val is not None else None
-        )
+        X_train, y_train = df_train[self.features], df_train["outcome"]
+        X_train.columns = X_train.columns.astype(str)
+
+        self.model = LogisticRegression(**params0).fit(X_train, y_train)
+
         return self
 
     def predict(self, df_valid):
-        return self.model.predict(df_valid[self.features])
+        df_valid.columns = df_valid.columns.astype(str)
+        return self.model.predict_proba(df_valid[self.features])
 
 
 if __name__ == "__main__":
@@ -203,22 +192,15 @@ if __name__ == "__main__":
         'rem_cols': ['id', 'age', 'lesion_3', 'lesion_2', 'lesion_1', 'hospital_number']
     }
 
-    # lgbm params
-    cfg.params_lgb = {
-        'objective': 'multiclass',
-        'num_class': 3,
-        'boosting_type': 'gbdt',
-        'num_leaves': 24,
-        'max_depth': 10,
-        'n_estimators': 450,
-        'learning_rate': 0.08,
+    # logistic regression params
+    cfg.params_logistic_regression = {
+        'penalty': 'l2',
+        'C': 1.0,
+        'fit_intercept': True,
         'random_state': 42,
-        'verbose': -1,
-        'subsample': 0.8,
-        'colsample_bytree': 0.65,
-        'reg_alpha': 0.0001,
-        'reg_lambda': 3.5,
-        #     'metric':'cross_entropy',
+        'max_iter': 150,
+        'multi_class': 'multinomial',
+        'warm_start': True
     }
 
     cfg.weight_map = {0: 1.7, 1: 1.0, 2: 2.5}
@@ -241,16 +223,16 @@ if __name__ == "__main__":
         X_train, y_train = X.iloc[train_idx], y.iloc[train_idx]
         X_val, y_val = X.iloc[test_idx], y.iloc[test_idx]
 
-        lgb_model = LGBModel(cfg)
-        lgb_model = lgb_model.fit(X_train,)
-        pred_val = lgb_model.predict(X_val).argmax(axis=1).tolist()
+        log_model = Logistic_Regression_Model(cfg)
+        log_model = log_model.fit(X_train,)
+        pred_val = log_model.predict(X_val).argmax(axis=1).tolist()
 
         scr = score_fn(pred_val, y_val)
         preds_val += pred_val
         acts_val += y_val.tolist()
         score.append(scr)
 
-        pred_test = lgb_model.predict(df_test)
+        pred_test = log_model.predict(df_test)
         preds_test.append(pred_test)
 
         print(f"Fold: {fold} | Score: {scr}")
@@ -258,12 +240,13 @@ if __name__ == "__main__":
     print(
         f"Score: {score_fn(preds_val, acts_val)} | mean_score: {np.mean(score)} | std of score: {np.std(score)}")
 
-    lgb_model = LGBModel(cfg)
-    lgb_model = lgb_model.fit(df_train)
-    pred_test = lgb_model.predict(df_test).argmax(axis=1).tolist()
+    log_model = Logistic_Regression_Model(cfg)
+    log_model = log_model.fit(df_train)
+    pred_test = log_model.predict(df_test).argmax(axis=1).tolist()
 
     # pred_test = np.mean(np.array(preds_test),axis = 0).argmax(axis = 1)
     pred_test = enc.inverse_transform(pred_test)
 
     submission_data['outcome'] = pred_test
-    submission_data.to_csv(OUTPUT_PATH + "/submission_lgbm.csv", index=False)
+    submission_data.to_csv(
+        OUTPUT_PATH + "/submission_logistic_regression.csv", index=False)
